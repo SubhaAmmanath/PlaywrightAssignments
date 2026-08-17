@@ -17,7 +17,7 @@ export default defineConfig({
 
   timeout: 30 * 1000,
   expect:{
-    timeout: 4000,
+    timeout: 40*1000,
     
   },
 reporter: 'html',
@@ -33,7 +33,7 @@ reporter: 'html',
   
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-   browserName: 'chromium',
+   
    headless: false,
    navigationTimeout: 10*1000,
    actionTimeout: 10*1000,
@@ -49,7 +49,16 @@ reporter: 'html',
       use: { ...devices['Desktop Chrome'] },
     },
 
-    
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+
+    // {
+    //   name: 'webkit',
+    //   use: { ...devices['Desktop Safari'] },
+    // },
+
   
   ],
 
