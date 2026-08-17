@@ -34,7 +34,7 @@ reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
    
-   headless: false,
+   headless: true,
    navigationTimeout: 10*1000,
    actionTimeout: 10*1000,
    screenshot: 'on',
