@@ -34,10 +34,10 @@ reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
    
-   headless: true,
+   headless: false,
    navigationTimeout: 10*1000,
    actionTimeout: 10*1000,
-   screenshot: 'on',
+   screenshot: 'only-on-failure',
    trace: 'on',
    videorecording: 'off'
   },
@@ -49,10 +49,10 @@ reporter: 'html',
       use: { ...devices['Desktop Chrome'] },
     },
 
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
+    // {
+    //   name: 'firefox',
+    //   use: { ...devices['Desktop Firefox'] },
+    // },
 
     // {
     //   name: 'webkit',
