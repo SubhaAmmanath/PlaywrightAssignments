@@ -99,4 +99,263 @@ test('Book an event Assignment 4', async ({ browser }) => {
     await eventPage.deleteBooking();
 
 });
+test.skip('Create New event Assignment', async ({ page }) => {
+
+    const emailId = 'test2user2@test.com';
+    await page.goto('https://eventhub.rahulshettyacademy.com/events');
+    await expect(page.getByText('Sign in to EventHub')).toBeVisible();
+    await expect(page.locator('#email')).toHaveAttribute('placeholder', 'you@email.com');
+    await expect(page.locator('#password')).toBeVisible();
+    await expect(page.locator('#login-btn')).toBeVisible();
+    await expect(page).toHaveURL(/login/);
+    //Login to the application
+    await page.locator('#email').fill(emailId);
+    await page.locator('#password').fill('Test2user2!');
+
+
+
+    //click on signin to login to application
+    await page.getByRole('button', { name: "Sign In" }).click();
+
+    //verify application is loaded after user logged in
+    await page.getByText('Browse Events').first().waitFor();
+    await expect(page).toHaveTitle('EventHub — Discover & Book Events');
+
+    await page.getByRole('button', { name: 'Admin' }).click();
+    await page.getByRole('link', { name: 'Manage Events' }).first().click();
+    const eventName10 = `Test Event ${Date.now()}`;
+    await page.locator('#event-title-input').fill(eventName10);
+    await page.getByPlaceholder('Describe the event…').fill("Test event to verify event creation");
+    await page.locator('select').selectOption('Sports');
+    await page.locator('#city').fill("Chennai")
+    await page.locator('#venue').fill("Pragati Maidan Exhibition Grounds, Chennai")
+    await page.locator('[id="price-($)"]').fill('350');
+    await page.locator('#total-seats').fill('1000');
+    await page.locator('[id="event-date-&-time"]').fill('2026-10-24T21:25');
+    await page.getByTestId('add-event-btn').click();
+    await page.getByText('Event created!').isVisible();
+    //navigate to Events Tab and verify tab is loaded
+    await page.getByTestId('nav-events').click();
+    await expect(page.getByText("Upcoming Events")).toBeVisible();
+
+    //Search for an event called world and filter using location hyderabad
+    await page.getByPlaceholder('Search events, venues…').pressSequentially(eventName10, { delay: 100 });
+    await page.locator('select').nth(1).selectOption('Chennai');
+    //Verify the event tile is displayed and verify the details in the tile
+    await expect(page.getByTestId('event-card').getByText(eventName10)).toBeVisible();
+    const eventTile = await page.getByTestId('event-card');
+    await expect(eventTile).toHaveCount(1);
+    await expect(eventTile.getByRole('link', { name: eventName10 }))
+        .toBeVisible();
+    const price = await eventTile.locator('.text-lg');
+
+    await expect(price).toHaveText('$350');
+    await page.pause();
+    //Verify the seats left is greater than 0 and click on book now button
+    const seatText = await page.getByTestId('event-card').getByText(/seats available/i).innerText();
+
+    const seatCount = Number(seatText.split(' ')[0]);
+    if (seatCount > 0) {
+        await page.getByTestId('book-now-btn').click();
+    }
+
+    //Verify confirm booking page is loaded
+    await expect(page).toHaveURL(/events/);
+    await page.getByRole('heading', { name: eventName10 });
+    await expect(page.getByText('Total$')).toContainText('$350');
+    await expect(page.getByText('Chennai', { exact: true })).toBeVisible();
+    //Fill customer details and click on confirm booking
+    await page.locator('#customerName').fill(customerName);
+    await page.locator('#customer-email').fill(emailId);
+    await page.locator('#phone').fill('9876543210');
+    await page.getByRole('button', { name: 'Confirm Booking' }).click();
+    await expect(page.getByRole('heading', { name: 'Booking Confirmed!' })).toBeVisible();
+
+    this.bookingRef = await page.locator("//span[text()='Booking Ref']//following-sibling::span").textContent();
+    await console.log(bookingRef);
+    await expect(this.bookingRef).not.toBeNull();
+
+
+    //Click on view my bookings and verify the booking is displayed in the list
+    await page.getByRole('button', { name: 'View My Bookings' }).click();
+    await page.getByRole('button', { name: 'View Details' }).click();
+    await expect(page.getByRole('heading', { name: eventName10 })).toBeVisible();
+    const actualBookingRef = await page.locator('.booking-ref').textContent();
+    expect(actualBookingRef).toBe(bookingRef);
+    await expect(page.getByText('ticket').nth(1)).toContainText('1');
+
+});
+
+test.only('Assignment5 Replace the live EventHub events catalog with controlled mock data so filter and detail checks stay stable regardless of backend changes', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    const eventPage = new EventPage(page);
+    const mockEvents = [
+        {
+            id: 200,
+            title: 'IT conference at Hyderabad',
+            description: 'All Architects and Senior developers meet. It will be held in Gachibowli Hyderabad. It is a two-day event',
+            category: 'Conference',
+            venue: 'Gachibowli',
+            city: 'Hyderabad',
+            eventDate: '2026-12-21T17:00:00.000Z',
+            price: '350',
+            totalSeats: 10000,
+            availableSeats: 9000,
+            imageUrl: ''
+        },
+        {
+            id: 201,
+            title: 'Onam celebration — Delhi Malayali association',
+            description: 'An event to experience Onam and rituals. Enjoy delicious local cuisine and culture',
+            category: 'Festival',
+            venue: 'Delhi, GSM Mall',
+            city: 'Delhi',
+            eventDate: '2026-11-23T19:00:00.000Z',
+            price: '250',
+            totalSeats: 500,
+            availableSeats: 500,
+            imageUrl: ''
+        },
+        {
+            id: 202,
+            title: 'Resin art workshop',
+            description: 'A resin art workshop is a hands-on, beginner-friendly creative class',
+            category: 'Workshop',
+            venue: 'Bangalore, Function hall, road number 10',
+            city: 'Bangalore',
+            eventDate: '2026-10-18T09:00:00.000Z',
+            price: '500',
+            totalSeats: 500,
+            availableSeats: 500,
+            imageUrl: ''
+        },
+        {
+            id: 203,
+            title: 'Sherya Ghoshal live concert',
+            description: 'Concert to mesmerize your two hours',
+            category: 'Concert',
+            venue: 'Mumbai, Parade Grounds',
+            city: 'Mumbai',
+            eventDate: '2026-10-28T20:00:00.000Z',
+            price: '500',
+            totalSeats: 500,
+            availableSeats: 500,
+            imageUrl: ''
+        }
+    ];
+    const searchKeyword = 'IT conference';
+    const filteredEvents = mockEvents.filter(event =>
+        event.title.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+        event.description.toLowerCase().includes(searchKeyword.toLowerCase())
+    );
+
+    //routing options for different scenarios
+    await page.route(/\/api\/events/, async (route) => {
+        const url = route.request().url();
+
+        // Scenario 1: Individual Event Details lookup matching specific ID for booking
+        const idMatch = url.match(/\/api\/events\/(\d+)/);
+        if (idMatch) {
+            const targetId = parseInt(idMatch[1], 10);
+            const eventDetails = mockEvents.find(item => item.id === targetId);
+
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { 'access-control-allow-origin': '*' },
+                body: JSON.stringify({ success: true, data: eventDetails || mockEvents[0] })
+            });
+        }
+
+        //search scenario
+        if (url.includes('search=')) {
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                headers: { 'access-control-allow-origin': '*' },
+                body: JSON.stringify({ success: true, data: filteredEvents })
+            });
+        }
+
+        // Scenario 3:mock data loading when user click on browse events
+        return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            headers: { 'access-control-allow-origin': '*' },
+            body: JSON.stringify({ success: true, data: mockEvents })
+        });
+    });
+    // Login to application
+    await loginPage.navigatoApplicationURL();
+    await loginPage.loginUsingCred(emailId, pwd);
+    await eventPage.navigateToBrowseEvents();
+
+    // Verify  mocked display tiles and its values
+    const eventCards = page.getByTestId('event-card');
+    await expect(eventCards).toHaveCount(mockEvents.length);
+
+    for (const event of mockEvents) {
+
+        // Find the card corresponding to the current mock event
+        const eventCard = eventCards.filter({
+            hasText: event.title
+        });
+
+        // Make sure exactly one card exists for this event
+        await expect(eventCard).toHaveCount(1);
+
+        // Verify title
+        await expect(eventCard).toContainText(event.title);
+
+        // Verify price
+        await expect(eventCard).toContainText(`$${event.price}`);
+
+        // Get seat availability text
+        const seatText = await eventCard
+            .getByText(/seats available/i)
+            .innerText();
+
+        // Example: "9000 seats available"
+        const seatCount = Number(
+            seatText.split(' ')[0]
+        );
+
+        // Verify seats against mock data
+        expect(seatCount).toBe(event.availableSeats);
+    }
+
+    //Search a mocked event
+    const searchInput = page.getByPlaceholder(/search events/i); // Adjust locator text to match your input placeholder
+    await searchInput.fill('IT conference');
+    await searchInput.press('Enter');
+
+    // Assert search changes
+    await expect(page.getByText('IT conference at Hyderabad')).toBeVisible();
+    await expect(page.getByText('Resin art workshop')).toBeHidden();
+    await page.getByTestId('book-now-btn').click();
+    // Verify events details from booking page
+    await expect(page.getByText('IT conference at Hyderabad')).toBeVisible();
+    await expect(page.getByText('Gachibowli')).toBeVisible();
+    await expect(page.getByText('9000 / 10000 seats')).toBeVisible();
+    await expect(page.getByText('350')).toBeVisible();
+    const ticketsCount = page.getByText('Tickets', { exact: true }).locator('..');
+    await expect(ticketsCount.getByText('1', { exact: true })).toBeVisible();
+    await (page.getByRole('button', { name: '+' })).click();
+    await expect(ticketsCount.getByText('2', { exact: true })).toBeVisible();
+    const total = Number(mockEvents[0].price.replace(/[$,]/g, '')) * 2;
+    const actual = await page.locator("//span[text()='Total']/following-sibling::span").textContent();
+    const actualTotal = Number((actual || '').replace(/[$,]/g, ''));
+    await expect(actualTotal).toBe(Number(total));
+   
+});
+
+
+
+
+
+
+
+
+
+
 
