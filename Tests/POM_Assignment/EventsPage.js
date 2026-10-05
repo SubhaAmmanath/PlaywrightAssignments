@@ -14,7 +14,7 @@ class EventPage {
         await expect(this.page.getByText("Upcoming Events")).toBeVisible();
     }
     async searchForAnEventAndVerify(eventLocation, eventName, price) {
-        await this.page.getByPlaceholder('Search events, venues…').pressSequentially(eventName, { delay: 100 });
+        await this.page.getByPlaceholder('Search events, venues…').fill(eventName);
         await this.page.locator('select').nth(1).selectOption(eventLocation);
 
         //Verify the event tile is displayed and verify the details in the tile
@@ -26,21 +26,23 @@ class EventPage {
     }
     async checkForSeatAvailabilityandBook() {
         const seatText = await this.eventTile
-            .getByText(/seats available/i)
+            .getByText(/seats available|seats left|sold out/i)
             .innerText();
 
-        const seatCount = Number(seatText.split(' ')[0]);
-        if (seatCount > 0) {
-            await this.bookButton.click();
-        } else {
-            console.log('Seats are not available');
-        }
+        const seatCountMatch = seatText.match(/[\d,]+/);
+        const seatCount = seatCountMatch ? Number(seatCountMatch[0].replace(/,/g, '')) : 0;
+        expect(seatCount, `Expected seats to be available; UI showed: ${seatText}`).toBeGreaterThan(0);
+        const firstCard = this.eventTile.first();
+        const eventTitleLink = firstCard.getByRole('link').first();
+        await eventTitleLink.click();
+        await expect(this.page).toHaveURL(/\/events\/\d+$/);
+        await expect(this.page.getByRole('heading', { level: 1 })).toBeVisible();
     }
     async checkBookingPageInfo(eventName, eventLocation, price) {
-        await expect(this.page).toHaveURL(/events/);
-        await expect(this.page.getByRole('heading', { name: eventName })).toBeVisible();
-        const totalRow = this.page.locator('div').filter({ hasText: /^Total/ });
-        await expect(totalRow).toContainText("Total" + price);
+        await expect(this.page).toHaveURL(/\/events/);
+        await expect(this.page.getByRole('heading', { name: eventName, level: 1 })).toBeVisible();
+        const totalLabel = this.page.getByText('Total', { exact: true });
+        await expect(totalLabel.locator('..')).toContainText(price);
         await expect(this.page.getByText(eventLocation, { exact: true })).toBeVisible();
     }
     async checkEventTileDetails(eventName1, eventName2, eventName3) {
@@ -77,7 +79,7 @@ class EventPage {
         await this.page.getByRole('button', { name: 'View My Bookings' }).click();
     }
     async verifyBookingDetails(eventName,order) {
-       this.clickonviewBooking();
+         await this.clickonviewBooking();
        const count = await this.bookingTiles.count();
         if (count === 1) {
             await expect(this.page.getByRole('heading', { name: eventName })).toBeVisible();
