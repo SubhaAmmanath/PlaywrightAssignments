@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect, request } = require('@playwright/test');
 const { LoginPage } = require('../Tests/POM_Assignment/LoginPage.js')
 const { EventPage } = require('../Tests/POM_Assignment/EventsPage.js')
 const emailId = 'test2user2@test.com';
@@ -63,9 +63,6 @@ test('Book an event Assignment 4', async ({ browser }) => {
     await eventPage.searchForAnEventAndVerify(eventLocation, eventName, ticketPrice1);
 
     //Verify the event tile is displayed and verify the details in the tile
-    await eventPage.checkForSeatAvailabilityandBook();
-
-    //Verify the seats left is greater than 0 and click on book now button
     await eventPage.checkForSeatAvailabilityandBook();
 
     //Verify confirm booking page is loaded
@@ -186,7 +183,7 @@ test.skip('Create New event Assignment', async ({ page }) => {
 
 });
 
-test.only('Assignment5 Replace the live EventHub events catalog with controlled mock data so filter and detail checks stay stable regardless of backend changes', async ({ page }) => {
+test('Assignment5 Replace the live EventHub events catalog with controlled mock data so filter and detail checks stay stable regardless of backend changes', async ({ page }) => {
     const loginPage = new LoginPage(page);
     const eventPage = new EventPage(page);
     const mockEvents = [
@@ -337,7 +334,7 @@ test.only('Assignment5 Replace the live EventHub events catalog with controlled 
     await expect(page.getByText('IT conference at Hyderabad')).toBeVisible();
     await expect(page.getByText('Gachibowli')).toBeVisible();
     await expect(page.getByText('9000 / 10000 seats')).toBeVisible();
-    await expect(page.getByText('350')).toBeVisible();
+    await expect(page.getByText('Price per ticket', { exact: true }).locator('..')).toContainText('$350');
     const ticketsCount = page.getByText('Tickets', { exact: true }).locator('..');
     await expect(ticketsCount.getByText('1', { exact: true })).toBeVisible();
     await (page.getByRole('button', { name: '+' })).click();
@@ -346,16 +343,188 @@ test.only('Assignment5 Replace the live EventHub events catalog with controlled 
     const actual = await page.locator("//span[text()='Total']/following-sibling::span").textContent();
     const actualTotal = Number((actual || '').replace(/[$,]/g, ''));
     await expect(actualTotal).toBe(Number(total));
-   
+
 });
 
+test('Assignment6 Patch exactly one live booking in transit and prove My Bookings and the booking detail page reflect only those intentional changes.', async ({ page, request }) => {
+    const loginPage = new LoginPage(page);
+    const eventPage = new EventPage(page);
 
+    await loginPage.navigatoApplicationURL();
+    await loginPage.loginUsingCred(emailId, pwd);
+    const token = await page.evaluate(() => localStorage.getItem('eventhub_token'));
+    expect(token).toBeTruthy();
+    const authHeaders = { Authorization: `Bearer ${token}` };
 
+    const [targetResponse, controlResponse] = await Promise.all([
+        request.post('https://api.eventhub.rahulshettyacademy.com/api/bookings', {
+            headers: authHeaders,
+            data: {
+                customerName: 'Assignment 6 target',
+                customerEmail: emailId,
+                customerPhone: '9876543210',
+                quantity: 1,
+                eventId: 285
+            }
+        }),
+        request.post('https://api.eventhub.rahulshettyacademy.com/api/bookings', {
+            headers: authHeaders,
+            data: {
+                customerName: 'Assignment 6 control',
+                customerEmail: emailId,
+                customerPhone: '9876543210',
+                quantity: 1,
+                eventId: 284
+            }
+        })
+    ]);
+    expect(targetResponse.status()).toBe(201);
+    expect(controlResponse.status()).toBe(201);
+    const targetBooking = (await targetResponse.json()).data;
+    const controlBooking = (await controlResponse.json()).data;
 
+    const patchedTitle = 'Intentional Cricket Tournament';
+    const patchedTicketCount = 5;
+    const patchedTotalAmount = String(Number(targetBooking.totalPrice) * patchedTicketCount);
+    const patchedRefCode = `PATCH-${targetBooking.bookingRef}`;
 
+    await page.route('**/api/bookings**', async (route) => {
+        if (route.request().method() !== 'GET') {
+            return route.continue();
+        }
 
+        const response = await route.fetch();
+        const payload = await response.json();
+        const bookings = Array.isArray(payload.data) ? payload.data : [payload.data];
+        for (const booking of bookings) {
+            if (booking?.bookingRef === targetBooking.bookingRef) {
+                booking.bookingRef = patchedRefCode;
+                booking.quantity = patchedTicketCount;
+                booking.totalPrice = patchedTotalAmount;
+                if (booking.event)
+                    booking.event.title = patchedTitle;
+            }
+        }
+        await route.fulfill({
+            response,
+            contentType: 'application/json',
+            body: JSON.stringify(payload)
+        });
+    });
+    await eventPage.navigateToMyBooking();
 
+    await expect(page.getByTestId('nav-bookings')).toBeVisible();
+    const patchedCard = page.getByTestId('booking-card').filter({ hasText: patchedRefCode });
+    await expect(patchedCard).toHaveCount(1);
+    await expect(patchedCard).toContainText(patchedTitle);
+    await expect(patchedCard).toContainText(`${patchedTicketCount} tickets`);
+    await expect(patchedCard).toContainText(`$${Number(patchedTotalAmount).toLocaleString('en-US')}`);
 
+    const unpatchedCard = page.getByTestId('booking-card').filter({ hasText: controlBooking.bookingRef });
+    await expect(unpatchedCard).toHaveCount(1);
+    await expect(unpatchedCard).toContainText(controlBooking.event.title);
+    await expect(unpatchedCard).not.toContainText(patchedTitle);
+    await patchedCard.getByRole('button', { name: 'View Details' }).first().click();
 
+    await expect(page.locator('body')).toContainText(patchedRefCode);
+    await expect(page.getByRole('heading', { name: patchedTitle })).toBeVisible();
+    await expect(page.locator('body')).toContainText(emailId);
+    await expect(page.locator('body')).toContainText(`${patchedTicketCount}`);
 
+    await page.getByRole('button', { name: 'Back to My Bookings' }).click();
+    await expect(page.getByTestId('booking-card').filter({ hasText: patchedRefCode })).toContainText(patchedTitle);
 
+    const [targetDelete, controlDelete] = await Promise.all([
+        request.delete(`https://api.eventhub.rahulshettyacademy.com/api/bookings/${targetBooking.id}`, { headers: authHeaders }),
+        request.delete(`https://api.eventhub.rahulshettyacademy.com/api/bookings/${controlBooking.id}`, { headers: authHeaders })
+    ]);
+    expect(targetDelete.status()).toBe(200);
+    expect(controlDelete.status()).toBe(200);
+});
+
+test('Assignment7 Create a booking through the EventHub API for a runtime-selected event,', async ({ page, request }) => {
+    const eventPage = new EventPage(page);
+    const loginResponse = await request.post('https://api.eventhub.rahulshettyacademy.com/api/auth/login', {
+        data: {
+            email: emailId,
+            password: pwd
+        }
+    });
+    expect(loginResponse.status()).toBe(200);
+    const loginPayload = await loginResponse.json();
+    expect(loginPayload.success).toBe(true);
+    const token = loginPayload.token;
+
+    const eventResponse = await request.get('https://api.eventhub.rahulshettyacademy.com/api/events/285', {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    });
+    expect(eventResponse.status()).toBe(200);
+    const eventPayload = await eventResponse.json();
+
+    expect(eventPayload.success).toBe(true);
+    expect(eventPayload.data.id).toBe(285);
+    expect(eventPayload.data.availableSeats).toBeGreaterThan(2);
+    const bookingPayload = { customerName: "test", customerEmail: "test@test.com", customerPhone: "9876543210", quantity: 2, eventId: 285 };
+    const bookAnEvent = await request.post('https://api.eventhub.rahulshettyacademy.com/api/bookings', {
+        headers: {
+            Authorization: `Bearer ${token}`
+        },
+        data: bookingPayload,
+
+    });
+    expect(bookAnEvent.status()).toBe(201);
+    const bookAnEventPayload = await bookAnEvent.json();
+    const bookingRef = bookAnEventPayload.data.bookingRef;
+    await console.log(bookingRef);
+    const id = bookAnEventPayload.data.id;
+    const qty = bookAnEventPayload.data.quantity;
+    const price = bookAnEventPayload.data.totalPrice;
+    const getBookingDetails = await request.get(`https://api.eventhub.rahulshettyacademy.com/api/bookings/${id}`, {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    });
+    expect(getBookingDetails.status()).toBe(200);
+    const bookingDetailsPayload = await getBookingDetails.json();
+
+    expect(bookingDetailsPayload.data.bookingRef).toBe(bookingRef);
+    expect(bookingDetailsPayload.data.id).toBe(id);
+    expect(bookingDetailsPayload.data.quantity).toBe(qty);
+    expect(bookingDetailsPayload.data.totalPrice).toBe(price);
+
+    await page.addInitScript(value => {
+        window.localStorage.setItem('eventhub_token', value);
+    }, token);
+    await page.goto('https://eventhub.rahulshettyacademy.com/events');
+    await eventPage.navigateToMyBooking();
+    const bookingCard = page.getByTestId('booking-card').filter({ hasText: bookingRef });
+    await expect(bookingCard).toHaveCount(1);
+    await expect(bookingCard).toContainText(`${qty} tickets`);
+    await expect(bookingCard).toContainText(`$${price}`);
+    await bookingCard.getByRole('button', { name: 'View Details' }).first().click();
+    await expect(page.locator('body')).toContainText(bookingRef);
+    await expect(page.getByText('test@test.com')).toBeVisible();
+    const deleteBookingDetails = await request.delete(`https://api.eventhub.rahulshettyacademy.com/api/bookings/${id}`, {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    });
+    expect(deleteBookingDetails.status()).toBe(200);
+    const payload = await deleteBookingDetails.json();
+    await expect(payload.message).toBe('Booking cancelled');
+    const retreiveBookingDetails = await request.get(`https://api.eventhub.rahulshettyacademy.com/api/bookings/${id}`, {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    });
+    expect(retreiveBookingDetails.status()).toBe(404);
+    await console.log(retreiveBookingDetails.json());
+    await page.getByTestId('nav-events').click();
+    await expect(page.getByText("Upcoming Events")).toBeVisible();
+    await eventPage.navigateToMyBooking();
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.getByTestId('booking-card').filter({ hasText: bookingRef })).toHaveCount(0);
+   
+});
